@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String         @id @default(cuid())
+  name               String
+  email              String         @unique
+  emailVerified      DateTime?
+  password           String?
+  phone              String?
+  role               String         @default("DONOR") // DONOR | RECIPIENT | VOLUNTEER | ADMIN
+  image              String?
+  verificationStatus String         @default("UNVERIFIED") // UNVERIFIED | VERIFIED | TRUSTED
+  organizationId     String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  organization       Organization?  @relation(fields: [organizationId], references: [id])
+  donations          Donation[]     @relation("DonorDonations")
+  deliveries         Delivery[]
+  notifications      Notification[]
+  accounts           Account[]
+  sessions           Session[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Organization {
+  id                 String    @id @default(cuid())
+  name               String
+  type               String    // RESTAURANT | HOTEL | NGO | FOOD_BANK | SHELTER | COMMUNITY_KITCHEN | CORPORATE | OTHER
+  address            String
+  latitude           Float?
+  longitude          Float?
+  capacity           Int?
+  verificationStatus String    @default("UNVERIFIED")
+  contact            String?
+  description        String?
+  website            String?
+  beneficiaries      Int?      @default(0)
+  dailyMealRequirement Int?    @default(0)
+  currentFoodStock   Int?      @default(0)
+  preferredCategories String?  // JSON array stored as string
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  users              User[]
+  donationsAsRecipient Match[]
+
+  @@map("organizations")
+}
+
+model Donation {
+  id               String    @id @default(cuid())
+  donorId          String
+  foodName         String
+  category         String    // COOKED_MEALS | BAKERY | PRODUCE | DAIRY | PACKAGED | BEVERAGES | OTHER
+  quantity         Float
+  unit             String
+  servings         Int
+  dietaryType      String    // VEGETARIAN | NON_VEGETARIAN | VEGAN
+  allergens        String?   // JSON array
+  preparedAt       DateTime?
+  availableFrom    DateTime
+  consumeBefore    DateTime
+  storageCondition String?
+  pickupAddress    String
+  pickupLat        Float?
+  pickupLng        Float?
+  contactPerson    String?
+  contactPhone     String?
+  accessInstructions String?
+  packagingCondition String?
+  currentTemperature String?
+  status           String    @default("AVAILABLE") // DRAFT | AVAILABLE | MATCHING | MATCHED | PICKUP_ASSIGNED | PICKED_UP | IN_TRANSIT | DELIVERED | DISTRIBUTED | COMPLETED | CANCELLED | EXPIRED
+  urgency          String    @default("LOW") // CRITICAL | HIGH | MEDIUM | LOW
+  imageUrl         String?
+  aiSummary        String?
+  safetyStatus     String?   // LOW_RISK | REVIEW_REQUIRED | HIGH_RISK | DO_NOT_REDISTRIBUTE
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  donor            User      @relation("DonorDonations", fields: [donorId], references: [id])
+  matches          Match[]
+  delivery         Delivery?
+  impact           Impact?
+
+  @@map("donations")
+}
+
+model Match {
+  id                  String    @id @default(cuid())
+  donationId          String
+  recipientId         String    // Organization ID
+  matchScore          Float
+  distanceScore       Float?
+  urgencyScore        Float?
+  needScore           Float?
+  compatibilityScore  Float?
+  reliabilityScore    Float?
+  distance            Float?    // km
+  status              String    @default("PENDING") // PENDING | ACCEPTED | REJECTED | EXPIRED
+  explanation         String?   // JSON with match reasons
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  donation            Donation     @relation(fields: [donationId], references: [id])
+  recipient           Organization @relation(fields: [recipientId], references: [id])
+
+  @@map("matches")
+}
+
+model Delivery {
+  id             String    @id @default(cuid())
+  donationId     String    @unique
+  volunteerId    String?
+  pickupTime     DateTime?
+  deliveryTime   DateTime?
+  status         String    @default("PENDING") // PENDING | ASSIGNED | PICKED_UP | IN_TRANSIT | DELIVERED | CONFIRMED
+  pickupProof    String?
+  deliveryProof  String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  donation       Donation  @relation(fields: [donationId], references: [id])
+  volunteer      User?     @relation(fields: [volunteerId], references: [id])
+
+  @@map("deliveries")
+}
+
+model Impact {
+  id              String    @id @default(cuid())
+  donationId      String    @unique
+  meals           Int
+  foodWeight      Float?
+  peopleReached   Int?
+  co2Saved        Float?
+  createdAt       DateTime  @default(now())
+
+  donation        Donation  @relation(fields: [donationId], references: [id])
+
+  @@map("impacts")
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  type       String
+  title      String
+  message    String
+  readStatus Boolean   @default(false)
+  link       String?
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
